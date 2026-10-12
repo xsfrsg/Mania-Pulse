@@ -1,0 +1,5 @@
+本项目参考并移植 osu!mania 回放解析与判定逻辑：
+Mania-Replay-Master, https://github.com/Mania-Visualization-Project/Mania-Replay-Master
+上游采用 Apache License, Version 2.0。请参阅上游项目及其 LICENSE 获取完整源代码和许可证文本。
+
+本项目增加本地回放库、MD5 谱面匹配、逐音符时序分析、浏览器观察器与视频渲染，不修改 osu! 文件，也不上传回放数据。

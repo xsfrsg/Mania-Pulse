@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mania · 节奏轨迹</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+  <aside>
+    <div class="brand"><span class="brand-icon">Ⅳ</span><div>节奏轨迹<small>MANIA / REPLAY ANALYZER</small></div></div>
+    <div class="sidebar-heading"><span>本地回放</span><button id="refresh" title="重新扫描回放和谱面">↻ 刷新</button></div>
+    <button id="choose-osu" class="choose-osu">选择 osu! 文件夹</button>
+    <input id="search" type="search" placeholder="搜索歌曲或难度…" aria-label="搜索回放">
+    <p id="library-info" class="muted">正在扫描本地谱面…</p>
+    <div id="replay-list"></div>
+    <footer><span class="status-dot"></span> 本地运行 · 只读 osu! 文件<div id="directory"></div></footer>
+  </aside>
+  <main>
+    <header><span class="eyebrow">TIMING EXPLORER</span><span class="badge">osu!stable · 逐列分析</span></header>
+    <section id="empty"><div class="empty-icon">╱╲╱</div><h1>看清每一击的节奏</h1><p>从左侧选择回放，自动匹配 MD5 相同的谱面。<br>框选一段连打，观察每列的 early / late 走势。</p></section>
+    <div id="analysis" hidden>
+      <div class="analysis-workspace">
+        <div class="title-row"><h1 id="song-title"></h1><p id="song-detail" class="muted"></p><span class="match-badge">✓ MD5 精确匹配</span><div id="warnings"></div></div>
+        <section class="panel preview-panel">
+          <div class="panel-heading"><h2>铺面观察</h2><span id="preview-time" class="preview-time">0:00.00</span></div>
+          <canvas id="note-preview" tabindex="0" aria-label="轨内偏差折线与谱面，左早右晚，可上下拖动" role="img"></canvas>
+          <canvas id="overview" aria-label="整曲音符密度进度条，点击或拖动定位" role="img"></canvas>
+        </section>
+        <section class="observer-controls" aria-label="观察器控件">
+          <div class="preview-width-control"><span>宽度</span><div class="segmented" id="width-presets" aria-label="观察器宽度"><button data-width="240">窄</button><button data-width="320" class="active">标准</button><button data-width="420">宽</button></div></div>
+          <div class="preview-controls"><button id="preview-play" title="播放至曲末 · 空格播放/暂停">▶ 播放整曲</button><button id="preview-restart" title="回到曲首">↺ 回到曲首</button><label for="preview-speed">播放速度</label><select id="preview-speed" aria-label="播放速度"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select><label class="music-toggle"><input id="music-enabled" type="checkbox" checked> 配乐</label></div>
+          <div class="scroll-speed"><label for="scroll-speed">流速</label><input id="scroll-speed" type="range" min="5" max="40" step="1" value="20"><output id="scroll-speed-value">20 px/帧</output></div>
+          <label class="music-toggle"><input id="judgement-fill" type="checkbox"> 判定填色</label>
+          <audio id="music" preload="metadata"></audio><div id="music-status" class="music-status"></div>
+          <img id="song-cover" alt="谱面封面" hidden>
+        </section>
+        <section class="video-export">
+          <h2>黑底视频导出</h2>
+          <div class="export-options"><label>分辨率 <select id="export-resolution" aria-label="导出分辨率"><option value="540">540p · 360×540</option><option value="720">720p · 480×720</option><option value="1080" selected>1080p · 720×1080</option></select></label></div>
+          <div class="export-range"><label>起点 秒<input id="export-start" type="number" min="0" step="0.001" value="0"></label><label>终点 秒<input id="export-end" type="number" min="0" step="0.001" value="1"></label></div>
+          <div class="export-options"><button id="export-full">整曲范围</button><button id="export-visible">当前可视范围</button><select id="export-fps" aria-label="导出视频帧率"><option value="60">60 fps</option><option value="30">30 fps</option></select><label><input id="export-music" type="checkbox" checked> 带音乐</label></div>
+          <div class="export-options"><select id="export-encoder" aria-label="视频编码器"><option value="auto">自动 · 优先 GPU</option><option value="gpu">GPU · NVIDIA NVENC</option><option value="cpu">CPU · x264</option></select><button id="export-video">导出 MP4</button><button id="export-cancel" hidden>取消导出</button></div>
+          <p class="export-note">仅观察器 · 黑底 · 沿用填色与流速设置</p>
+          <div id="export-status" role="status" aria-live="polite"></div><div id="export-result"></div>
+        </section>
+      </div>
+      <details class="diagnostics"><summary id="diagnostic-summary">判定核对</summary><p>逐音符判定由 Mania-Replay-Master 规则重建。下表对照回放头部保存的总数；总数一致也不代表逐音符匹配已完全验证。长条尾部不画入曲线，但参与原规则的长条总判定。</p><div id="counts-table"></div><p id="diagnostic-detail"></p><a href="https://github.com/Mania-Visualization-Project/Mania-Replay-Master" target="_blank" rel="noreferrer">原项目 ↗</a></details>
+    </div>
+    <div id="message" role="status" hidden></div>
+  </main>
+  <div id="tooltip" hidden></div>
+  <script src="/app.js"></script>
+</body></html>
+
+
+
+
