@@ -2,6 +2,20 @@
 
 本地回放分析器：按轨显示实际击打相对预期时刻的偏差，并提供整曲预览、音乐同步和黑底视频导出。原项目：[Mania-Replay-Master](https://github.com/Mania-Visualization-Project/Mania-Replay-Master)，其判定和渲染参考见[原项目 README](https://github.com/Mania-Visualization-Project/Mania-Replay-Master/blob/master/README_CN.md)。上游源码不随本项目重复打包，授权说明见 [NOTICE](NOTICE)。
 
+## 展示
+
+界面总览：选择本地回放，逐轨观察击打偏差曲线，并定位整曲中的薄弱段落。
+
+![界面总览与逐轨偏差曲线](<readme/屏幕截图 2026-10-13 074037.png>)
+
+击打误差：悬停查看毫秒级 early / late 偏差，同时高亮点击与对应音符。
+
+![击打误差与配对高亮](<readme/屏幕截图 2026-10-13 073926.png>)
+
+early-Miss 提示：突出显示提前 Miss 及其音符归属，辅助观察可能的连崩起点。
+
+![early-Miss 与可能连崩起点](<readme/屏幕截图 2026-10-13 074000.png>)
+
 ## 启动
 
 1. 安装 Python 3.10 或更新版本，并在安装时勾选 **Add Python to PATH**。
