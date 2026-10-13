@@ -22,7 +22,7 @@ early-Miss 提示：突出显示提前 Miss 及其音符归属，辅助观察可
 2. 下载并解压本项目，打开项目文件夹（能看到 `requirements.txt` 和 `启动.cmd`），在文件夹空白处右键选择“在终端中打开”。安装完成后重新打开终端，再执行：
 
    ```powershell
-   py -3.12 -m pip install --only-binary=:all: -r requirements.txt
+   py -3.12 -m pip install --only-binary=:all: -r requirements.txt -i https://mirrors.ctyun.cn/pypi/simple/
    ```
 
 3. 启动程序。电脑只安装了 Python 3.12 时，双击 **启动.cmd** 即可；若同时安装了其他 Python 版本，用下面的命令确保安装依赖和启动使用同一个解释器：
