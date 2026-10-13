@@ -18,14 +18,21 @@ early-Miss 提示：突出显示提前 Miss 及其音符归属，辅助观察可
 
 ## 启动
 
-1. 安装 Python 3.10 或更新版本，并在安装时勾选 **Add Python to PATH**。
-2. 在项目目录打开终端，安装依赖：
+1. 下载 [Python 3.12.10 Windows 64 位安装包](https://pythonlang.cn/ftp/python/3.12.10/python-3.12.10-amd64.exe)，运行安装程序，勾选 **Add python.exe to PATH**，然后点击 **Install Now**。推荐使用此版本；Python 3.15 与当前固定依赖版本不兼容。
+2. 下载并解压本项目，打开项目文件夹（能看到 `requirements.txt` 和 `启动.cmd`），在文件夹空白处右键选择“在终端中打开”。安装完成后重新打开终端，再执行：
 
    ```powershell
-   python -m pip install -r requirements.txt
+   py -3.12 -m pip install --only-binary=:all: -r requirements.txt
    ```
 
-3. 双击唯一入口 **启动.cmd**。浏览器打开后，点左侧“选择 osu! 文件夹”，选 osu! 根目录、`Songs` 或 `Replays` 均可；程序会自动定位根目录并记住选择。换电脑或路径变化时重新选择。
+3. 启动程序。电脑只安装了 Python 3.12 时，双击 **启动.cmd** 即可；若同时安装了其他 Python 版本，用下面的命令确保安装依赖和启动使用同一个解释器：
+
+   ```powershell
+   py -3.12 src/analyzer.py
+   ```
+
+4. 浏览器打开后，点左侧“选择 osu! 文件夹”，选 osu! 根目录、`Songs` 或 `Replays` 均可；程序会自动定位根目录并记住选择。换电脑或路径变化时重新选择，否则无法找到本地回放或谱面。
+5. 选择回放开始分析；需要视频时，在导出区域选择范围、分辨率并导出。
 
 关闭启动用的命令窗口即可停止服务。页面只在本机运行，不会上传回放或修改 osu! 文件。若旧版服务仍占用默认端口，再次启动会自动切换端口并打开新版页面。无需 Conda、PyTorch 或便携 EXE。
 
