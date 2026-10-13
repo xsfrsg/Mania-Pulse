@@ -62,7 +62,10 @@ class VideoExports:
             from video_renderer import ReplayRenderer
         except ImportError:
             raise ValueError('后台视频导出需要 NumPy 和 OpenCV，请使用本机 torch 环境启动') from None
-        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)))
+        focus = float(options.get('focusRange', 40))
+        if not math.isfinite(focus) or not 40 <= focus <= 80:
+            raise ValueError('偏差量程需在 ±40 至 ±80 ms 之间')
+        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus)
         with self.lock:
             if any(job['state'] in ('rendering', 'encoding') for job in self.jobs.values()):
                 raise ValueError('已有视频正在导出，请完成或取消后再试')
