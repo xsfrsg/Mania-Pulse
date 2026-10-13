@@ -5,12 +5,12 @@ import cv2
 import numpy as np
 
 
-def offset_position(offset):
+def offset_position(offset, focus=40):
     value = abs(offset)
-    return math.copysign(.8 * value / 40 if value <= 40 else .8 + .2 * (1 - math.exp(-(value - 40) / 10)), offset)
+    return math.copysign(.8 * value / focus if value <= focus else .8 + .2 * (1 - math.exp(-(value - focus) / (focus / 4))), offset)
 
 
-def curve_tangents(lane):
+def curve_tangents(lane, focus=40):
     slopes = []
     for i, row in enumerate(lane):
         if row['offset'] is None:
@@ -22,9 +22,9 @@ def curve_tangents(lane):
         after = following is not None and following['offset'] is not None and following['time'] > row['time']
         h0 = row['time'] - previous['time'] if before else 0
         h1 = following['time'] - row['time'] if after else 0
-        value = offset_position(row['offset'])
-        d0 = (value - offset_position(previous['offset'])) / h0 if before else 0
-        d1 = (offset_position(following['offset']) - value) / h1 if after else 0
+        value = offset_position(row['offset'], focus)
+        d0 = (value - offset_position(previous['offset'], focus)) / h0 if before else 0
+        d1 = (offset_position(following['offset'], focus) - value) / h1 if after else 0
         if not before:
             slope = d1
         elif not after:
@@ -48,18 +48,19 @@ def hit_color(offset):
 class ReplayRenderer:
     width, height, top, bottom = 720, 1080, 39, 1051
 
-    def __init__(self, data, span, fill=False):
+    def __init__(self, data, span, fill=False, focus=40):
         self.data, self.span = data, span
         self.fill = fill
+        self.focus = focus
         self.cell = (self.width - 24) / data['keys']
         self.hit_y = self.bottom - 8
         self.scale = (self.bottom - self.top) / span
         self.lanes = [[r for r in data['rows'] if r['column'] == i] for i in range(data['keys'])]
         self.times = [[r['time'] for r in lane] for lane in self.lanes]
-        self.slopes = [curve_tangents(lane) for lane in self.lanes]
+        self.slopes = [curve_tangents(lane, focus) for lane in self.lanes]
         self.aux_lanes = [[r for r in data.get('auxiliary_curve', []) if r['column'] == i] for i in range(data['keys'])]
         self.aux_times = [[r['time'] for r in lane] for lane in self.aux_lanes]
-        self.aux_slopes = [curve_tangents(lane) for lane in self.aux_lanes]
+        self.aux_slopes = [curve_tangents(lane, focus) for lane in self.aux_lanes]
         self.base_gaps = [min((b['time'] - a['time'] for a, b in zip(lane, lane[1:]) if b['time'] > a['time']), default=100) for lane in self.lanes]
         self.longs = [r for r in data['rows'] if r['ln']]
         self.unmatched = sorted(data.get('unmatched_clicks', []) + data.get('invalid_clicks', []), key=lambda r: r['time'])
@@ -75,7 +76,7 @@ class ReplayRenderer:
             cv2.line(self.base, (round(12 + i * self.cell), self.top), (round(12 + i * self.cell), self.bottom), (52, 65, 90))
             self.text(self.base, f'Lane {i + 1}', center, 13, centered=True)
             extent = (self.cell / 2 - 9) * .8
-            for text, dx, color in [('-40', -extent, (104, 213, 227)), ('0', 0, (159, 174, 197)), ('+40', extent, (244, 179, 118))]:
+            for text, dx, color in [(f'-{focus:g}', -extent, (104, 213, 227)), ('0', 0, (159, 174, 197)), (f'+{focus:g}', extent, (244, 179, 118))]:
                 self.text(self.base, text, center + dx, 29, color, centered=True)
             self.text(self.base, str(i + 1), center, 1071, centered=True)
         cv2.line(self.base, (708, self.top), (708, self.bottom), (52, 65, 90))
@@ -154,7 +155,7 @@ class ReplayRenderer:
         for i, (lane, times, slopes) in enumerate(zip(self.lanes, self.times, self.slopes)):
             center, extent = 12 + (i + .5) * self.cell, self.cell / 2 - 9
             begin, finish = max(0, bisect.bisect_left(times, start - self.pad) - 1), min(len(lane), bisect.bisect_left(times, end + self.pad) + 1)
-            x = lambda row: center + offset_position(row['offset']) * extent
+            x = lambda row: center + offset_position(row['offset'], self.focus) * extent
             for k in range(max(1, begin), finish):
                 a, b = lane[k - 1], lane[k]
                 if a['offset'] is None or b['offset'] is None:
@@ -166,7 +167,18 @@ class ReplayRenderer:
                 t = np.linspace(0, 1, min(96, max(4, math.ceil(abs(by - ay) / 12))))[:, None]
                 points = (1 - t) ** 3 * controls[0] + 3 * (1 - t) ** 2 * t * controls[1] + 3 * (1 - t) * t ** 2 * controls[2] + t ** 3 * controls[3]
                 width = max(.6, min(8, 8 * self.base_gaps[i] / max(gap, self.base_gaps[i])))
-                self.stroke(frame, points, (173, 197, 231), width, .08 + .8 * math.exp(-max(0, gap - 100) / 220))
+                def edge_color(offset):
+                    mix = 1 - math.exp(-max(0, abs(offset) - self.focus) / (self.focus / 4))
+                    target = (70, 160, 255) if offset < 0 else (255, 149, 65)
+                    return np.array([round(v + (end - v) * mix) for v, end in zip((173, 197, 231), target)])
+                ca, cb = edge_color(a['offset']), edge_color(b['offset'])
+                if np.array_equal(ca, cb):
+                    self.stroke(frame, points, tuple(int(v) for v in ca), width, .08 + .8 * math.exp(-max(0, gap - 100) / 220))
+                    continue
+                for j in range(1, len(points)):
+                    fraction = (j - .5) / (len(points) - 1)
+                    color = tuple(int(v) for v in np.round(ca + (cb - ca) * fraction))
+                    self.stroke(frame, points[j-1:j+1], color, width, .08 + .8 * math.exp(-max(0, gap - 100) / 220))
             aux, aux_times, aux_slopes = self.aux_lanes[i], self.aux_times[i], self.aux_slopes[i]
             for k in range(max(1, bisect.bisect_left(aux_times, start) - 1), min(len(aux), bisect.bisect_right(aux_times, end) + 1)):
                 a, b = aux[k - 1], aux[k]
