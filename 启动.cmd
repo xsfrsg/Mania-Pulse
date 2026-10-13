@@ -1,5 +1,5 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-py src/analyzer.py
+py -3.12 src/analyzer.py
 if errorlevel 1 pause
