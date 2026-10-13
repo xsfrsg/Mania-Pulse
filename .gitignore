@@ -1,0 +1,35 @@
+# Local osu! paths and runtime data (also under src/).
+.runtime/
+exports/
+Songs/
+Replays/
+*.osr
+*.osu
+*.osz
+*.mp4
+*.webm
+*.mkv
+
+# Python environments and generated caches.
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Local secrets, logs and editor settings.
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+.DS_Store
