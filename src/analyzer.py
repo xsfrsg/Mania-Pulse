@@ -412,7 +412,8 @@ class Library:
                     auxiliary_curve.append(dict(time=click['time'], column=column, offset=offset, reference_time=reference['time'],
                                                 discrepancy=abs(offset - baseline) if baseline is not None else None, unmatched=True))
             auxiliary_curve.sort(key=lambda r: r['time'])
-            result = dict(replay=entry, keys=keys, rows=rows, duration=max(max((n.finish for n in notes), default=1), max((a.time for a in actions), default=1)),
+            # 共用时间轴增加 1 秒收尾，预览及整曲导出均让最后音符滚出视窗。
+            result = dict(replay=entry, keys=keys, rows=rows, duration=max(max((n.finish for n in notes), default=1), max((a.time for a in actions), default=1)) + 1000,
                           rate=rate, windows=window, official_counts=header['counts'], reconstructed_counts=counts,
                           counts_match=counts == header['counts'], warnings=warnings,
                           unmatched_actions=len(unmatched_clicks), unmatched_clicks=unmatched_clicks, invalid_clicks=invalid_clicks, click_links=click_links, auxiliary_curve=auxiliary_curve, action_count=len(actions),
