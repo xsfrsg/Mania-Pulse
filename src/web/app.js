@@ -13,9 +13,13 @@ const fmtTime = ms => `${Math.floor(ms/60000)}:${((ms%60000)/1000).toFixed(2).pa
 const preciseTime = ms => `${Math.floor(ms/60000)}:${((ms%60000)/1000).toFixed(3).padStart(6,'0')}`;
 const fmtOffset = n => `${n>0?'+':''}${n} ms`;
 function hitColor(offset){const neutral=[232,238,246],target=offset<0?[104,213,227]:[244,179,118],mix=Math.min(1,Math.abs(offset)/40),rgb=neutral.map((value,i)=>Math.round(value+(target[i]-value)*mix));return `rgb(${rgb.join(',')})`;}
-// ±40 ms 占轨道可用宽度的 80%；外侧连续压缩，40 ms 处斜率连续。
+// 所选量程占轨道可用宽度的 80%；两侧连续压缩，边界斜率连续。
 // 固定比例不随单曲最大偏差改变，保留原始毫秒值供悬停读取。
-function offsetPosition(offset){const value=Math.abs(offset),core=.8,focus=40;return Math.sign(offset)*(value<=focus?core*value/focus:core+(1-core)*(1-Math.exp(-(value-focus)/(focus*(1-core)/core))));}
+function offsetPosition(offset){const value=Math.abs(offset),core=.8,focus=state.focusRange||40;return Math.sign(offset)*(value<=focus?core*value/focus:core+(1-core)*(1-Math.exp(-(value-focus)/(focus*(1-core)/core))));}
+function edgeCurveColor(offset){const focus=state.focusRange||40,mix=1-Math.exp(-Math.max(0,Math.abs(offset)-focus)/(focus/4)),base=[173,197,231],target=offset<0?[70,160,255]:[255,149,65];return `rgb(${base.map((v,i)=>Math.round(v+(target[i]-v)*mix)).join(',')})`;}
+state.focusRange=Math.max(40,Math.min(80,Number(localStorage.getItem('offset-range'))||40));
+$('offset-range').value=state.focusRange;$('offset-range-value').value=`±${state.focusRange} ms`;
+$('offset-range').oninput=event=>{state.focusRange=Number(event.target.value);localStorage.setItem('offset-range',String(state.focusRange));$('offset-range-value').value=`±${state.focusRange} ms`;if(state.data){state.curveSlopes=state.lanes.map(curveTangents);state.auxSlopes=state.auxLanes.map(curveTangents);drawAll();}};
 // 单调三次 Hermite 插值：经过原始节点，转折处不向外过冲；Miss 切断邻域。
 function curveTangents(lane){
   return lane.map((row,i)=>{
@@ -116,10 +120,10 @@ function drawPreview(canvas=null,view=state){
   for(let i=0;i<view.data.keys;i++){
     const center=left+(i+.5)*cell;ctx.fillStyle='#ffffff04';ctx.fillRect(center-2,top,4,h-top);ctx.strokeStyle='#5a6b8566';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(center,top);ctx.lineTo(center,h-29);ctx.stroke();ctx.setLineDash([]);
     ctx.strokeStyle='#34415a';ctx.beginPath();ctx.moveTo(left+i*cell,top);ctx.lineTo(left+i*cell,h-28);ctx.stroke();ctx.textAlign='center';ctx.font='10px Segoe UI';ctx.fillStyle='#cbd5e9';ctx.fillText(`第 ${i+1} 列`,center,13);
-    const focusExtent=(cell/2-9)*offsetPosition(40);
+    const focusExtent=(cell/2-9)*.8;
     ctx.strokeStyle='#5a6b8538';ctx.setLineDash([2,6]);
     for(const sign of [-1,1]){ctx.beginPath();ctx.moveTo(center+sign*focusExtent,top);ctx.lineTo(center+sign*focusExtent,h-29);ctx.stroke();}ctx.setLineDash([]);
-    ctx.font='9px Segoe UI';ctx.fillStyle=colors.early;ctx.fillText('−40',center-focusExtent,29);ctx.fillStyle='#9faec5';ctx.fillText('0',center,29);ctx.fillStyle=colors.late;ctx.fillText('+40',center+focusExtent,29);ctx.fillStyle='#98a7bf';ctx.fillText(`${i+1}`,center,h-9);
+    ctx.font='9px Segoe UI';ctx.fillStyle=colors.early;ctx.fillText(`−${state.focusRange}`,center-focusExtent,29);ctx.fillStyle='#9faec5';ctx.fillText('0',center,29);ctx.fillStyle=colors.late;ctx.fillText(`+${state.focusRange}`,center+focusExtent,29);ctx.fillStyle='#98a7bf';ctx.fillText(`${i+1}`,center,h-9);
   }
   ctx.strokeStyle='#34415a';ctx.beginPath();ctx.moveTo(left+width,top);ctx.lineTo(left+width,h-28);ctx.stroke();ctx.save();ctx.beginPath();ctx.rect(left,top,width,h-top-29);ctx.clip();
   // 填色保留预期判定时间窗；外轮廓表示该音符实际头部判定。
@@ -161,7 +165,8 @@ function drawPreview(canvas=null,view=state){
     for(let k=Math.max(1,begin);k<end;k++){
       const previous=lane[k-1],row=lane[k];if(previous.offset===null||row.offset===null)continue;
       const gap=row.time-previous.time,startX=x(previous.offset),startY=y(previous.time),px=x(row.offset),py=y(row.time),slopes=view.curveSlopes[i];
-      ctx.strokeStyle=`rgba(173,197,231,${connectionOpacity(gap)})`;ctx.lineWidth=connectionWidth(gap,view.laneBaseGaps[i]);ctx.beginPath();ctx.moveTo(startX,startY);
+      const gradient=ctx.createLinearGradient(startX,startY,px,py);gradient.addColorStop(0,edgeCurveColor(previous.offset));gradient.addColorStop(1,edgeCurveColor(row.offset));
+      ctx.strokeStyle=gradient;ctx.globalAlpha=connectionOpacity(gap);ctx.lineWidth=connectionWidth(gap,view.laneBaseGaps[i]);ctx.beginPath();ctx.moveTo(startX,startY);
       if(gap>0)ctx.bezierCurveTo(startX+extent*slopes[k-1]*gap/3,startY+(py-startY)/3,px-extent*slopes[k]*gap/3,py-(py-startY)/3,px,py);
       else ctx.lineTo(px,py);
       ctx.stroke();
@@ -351,7 +356,7 @@ $('export-video').onclick=async()=>{
   const task={cancelled:false,id:null};videoExport=task;exportBusy(true);$('export-result').replaceChildren();
   try{
     $('export-status').textContent='正在提交后台任务…';
-    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,resolution:Number($('export-resolution').value)});
+    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,focusRange:state.focusRange,resolution:Number($('export-resolution').value)});
     task.id=job.id;localStorage.setItem('background-video-job',task.id);await watchExport(task);
   }catch(error){$('export-status').textContent=`导出失败：${error.message}`;videoExport=null;exportBusy(false);}
 };
