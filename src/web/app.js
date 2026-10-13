@@ -128,13 +128,13 @@ function drawPreview(canvas=null,view=state){
   ctx.strokeStyle='#34415a';ctx.beginPath();ctx.moveTo(left+width,top);ctx.lineTo(left+width,h-28);ctx.stroke();ctx.save();ctx.beginPath();ctx.rect(left,top,width,h-top-29);ctx.clip();
   // 填色保留预期判定时间窗；外轮廓表示该音符实际头部判定。
   // 判定窗为硬边界：先画所有 300 窗，再画 MAX 窗；不显示绿色 200。
-  const [maxWindow,window300]=view.data.windows;
+  const [maxWindow]=view.data.windows;
   for(const row of view.data.rows){
     if(row.ln&&row.time<=view.end&&row.time+row.duration>=view.start){
       ctx.fillStyle='#91a9ca25';ctx.fillRect(left+row.column*cell+5,y(row.time+row.duration),cell-10,y(row.time)-y(row.time+row.duration));
     }
   }
-  for(const [bound,color] of [[window300,'#716027'],[maxWindow,'#b8bcc5']]){
+  for(const [bound,color] of [[maxWindow,'#b8bcc5']]){
     if(!view.fill)continue;
     ctx.fillStyle=color;
     for(const row of view.data.rows){
@@ -149,8 +149,8 @@ function drawPreview(canvas=null,view=state){
     ctx.fillStyle='#ffffffaa';ctx.fillRect(left+row.column*cell+5,y(row.time)-1,cell-10,2);
   }
   for(const row of view.data.rows){
-    if(row.time-window300>view.end||row.time+window300<view.start)continue;
-    const x=left+row.column*cell+5,upper=y(row.time+window300),lower=y(row.time-window300);
+    if(row.time-maxWindow>view.end||row.time+maxWindow<view.start)continue;
+    const x=left+row.column*cell+5,upper=y(row.time+maxWindow),lower=y(row.time-maxWindow);
     const grade=row.head_judgement||row.judgement;
     ctx.strokeStyle=gradeColors[grade]||gradeColors.Miss;
     ctx.lineWidth=1.5;ctx.strokeRect(x,upper,cell-10,lower-upper);
@@ -216,7 +216,7 @@ function drawPreview(canvas=null,view=state){
   }
   const selected=view.hover?.link||(view.hover&&(view.data.click_links||[]).find(link=>!link.estimated&&link.column===view.hover.column&&link.reference_time===view.hover.time&&(view.hover.actual===null||link.time===view.hover.actual)));
   if(selected&&!selected.estimated){
-    const center=left+(selected.column+.5)*cell,upper=y(selected.reference_time+window300),lower=y(selected.reference_time-window300),actualY=y(selected.time);
+    const center=left+(selected.column+.5)*cell,upper=y(selected.reference_time+maxWindow),lower=y(selected.reference_time-maxWindow),actualY=y(selected.time);
     ctx.save();ctx.strokeStyle=selected.early_miss?'#ff7880':'#d5aaff';ctx.lineWidth=3;ctx.shadowColor=selected.early_miss?'#ff424f':'#c391ff';ctx.shadowBlur=9;
     ctx.strokeRect(left+selected.column*cell+5,upper,cell-10,lower-upper);
     const failed=selected.estimated||(view.data.invalid_clicks||[]).some(c=>c.column===selected.column&&c.time===selected.time);

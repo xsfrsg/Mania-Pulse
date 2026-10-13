@@ -114,8 +114,8 @@ class ReplayRenderer:
         cv2.addWeighted(overlay, alpha, roi, 1 - alpha, 0, dst=roi)
 
     def judgement_outline(self, frame, row, cursor):
-        # 按头部判定给 300 时间窗加外轮廓；不引入长条尾部判定。
-        bound = self.data['windows'][1]
+        # 显示长度仅取 MAX 时间窗；颜色仍取实际头部判定。
+        bound = self.data['windows'][0]
         left = round(12 + row['column'] * self.cell + 5)
         right = round(12 + (row['column'] + 1) * self.cell - 5)
         upper = round(self.y(row['time'] + bound, cursor))
@@ -139,7 +139,7 @@ class ReplayRenderer:
         for row in self.longs:
             if row['time'] <= end and row['time'] + row['duration'] >= start:
                 self.rect(frame, row['column'], self.y(row['time'] + row['duration'], cursor), self.y(row['time'], cursor), (145, 169, 202), .145)
-        for bound, color in [(self.data['windows'][1], (113, 96, 39)), (self.data['windows'][0], (184, 188, 197))]:
+        for bound, color in [(self.data['windows'][0], (184, 188, 197))]:
             if not self.fill:
                 continue
             for lane, times in zip(self.lanes, self.times):
@@ -148,7 +148,7 @@ class ReplayRenderer:
         for lane, times in zip(self.lanes, self.times):
             for row in lane[bisect.bisect_left(times, start):bisect.bisect_right(times, end)]:
                 self.rect(frame, row['column'], self.y(row['time'], cursor) - 1, self.y(row['time'], cursor) + 1, (255, 255, 255), .667)
-        bound = self.data['windows'][1]
+        bound = self.data['windows'][0]
         for lane, times in zip(self.lanes, self.times):
             for row in lane[bisect.bisect_left(times, start - bound):bisect.bisect_right(times, end + bound)]:
                 self.judgement_outline(frame, row, cursor)
