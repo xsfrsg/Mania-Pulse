@@ -26,6 +26,7 @@
           <div class="preview-width-control"><span>宽度</span><div class="segmented" id="width-presets" aria-label="观察器宽度"><button data-width="240">窄</button><button data-width="320" class="active">标准</button><button data-width="420">宽</button></div></div>
           <div class="preview-controls"><button id="preview-play" title="播放至曲末 · 空格播放/暂停">▶ 播放整曲</button><button id="preview-restart" title="回到曲首">↺ 回到曲首</button><label for="preview-speed">播放速度</label><select id="preview-speed" aria-label="播放速度"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select><label class="music-toggle"><input id="music-enabled" type="checkbox" checked> 配乐</label></div>
           <div class="scroll-speed"><label for="scroll-speed">流速</label><input id="scroll-speed" type="range" min="5" max="40" step="1" value="20"><output id="scroll-speed-value">20 px/帧</output></div>
+          <div class="scroll-speed"><label for="offset-range">偏差量程</label><input id="offset-range" type="range" min="40" max="80" step="1" value="40"><output id="offset-range-value">±40 ms</output></div>
           <label class="music-toggle"><input id="judgement-fill" type="checkbox"> 判定填色</label>
           <audio id="music" preload="metadata"></audio><div id="music-status" class="music-status"></div>
           <img id="song-cover" alt="谱面封面" hidden>
