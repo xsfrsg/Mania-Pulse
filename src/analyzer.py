@@ -422,7 +422,7 @@ class Library:
             result['audio'] = dict(available=audio_path is not None, name=audio_path.name if audio_path else '',
                                    url=f'/api/audio?id={key}' if audio_path else '')
             cover_path = self.cover_path(key)
-            result['cover'] = dict(available=cover_path is not None, url=f'/api/cover?id={key}' if cover_path else '')
+            result['cover'] = dict(available=cover_path is not None, url=f'/api/cover?id={key}' if cover_path else '', name=cover_path.name if cover_path else '')
             self.cached[key] = result
             return result
 

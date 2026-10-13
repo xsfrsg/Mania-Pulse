@@ -24,6 +24,11 @@ class VideoExports:
         height = int(options.get('resolution', 1080))
         if height not in (540, 720, 1080):
             raise ValueError('分辨率仅支持 540p、720p 或 1080p')
+        aspect = float(options.get('aspect', 2 / 3))
+        if not math.isfinite(aspect) or not .1 <= aspect <= 2:
+            raise ValueError('观察器宽高比无效')
+        render_width = max(120, 2 * round(1080 * aspect / 2))
+        output_width = max(2, 2 * round(render_width * height / 1080 / 2))
         speed, span = float(options.get('speed', 1)), float(options.get('span', 500))
         if speed not in (.5, .75, 1, 1.5) or not math.isfinite(span) or not 400 <= span <= 3200:
             raise ValueError('播放速度或一屏时长无效')
@@ -65,7 +70,7 @@ class VideoExports:
         focus = float(options.get('focusRange', 40))
         if not math.isfinite(focus) or not 40 <= focus <= 80:
             raise ValueError('偏差量程需在 ±40 至 ±80 ms 之间')
-        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus)
+        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus, width=render_width, pair_highlight=bool(options.get('pairHighlight', False)))
         with self.lock:
             if any(job['state'] in ('rendering', 'encoding') for job in self.jobs.values()):
                 raise ValueError('已有视频正在导出，请完成或取消后再试')
@@ -77,7 +82,7 @@ class VideoExports:
             partial = self.root / f'{key}.part.mp4'
             log = (self.root / f'{key}.log').open('wb')
             args = [encoder, '-hide_banner', '-loglevel', 'error', '-y', '-f', 'rawvideo',
-                    '-pixel_format', 'rgb24', '-video_size', '720x1080', '-framerate', str(fps), '-i', 'pipe:0']
+                    '-pixel_format', 'rgb24', '-video_size', f'{render_width}x1080', '-framerate', str(fps), '-i', 'pipe:0']
             rate = data['rate'] * speed
             if audio:
                 args += ['-ss', str(start * data['rate']), '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0',
@@ -86,7 +91,7 @@ class VideoExports:
                 args += ['-an']
             args += ['-t', str(frames / fps)]
             if height != 1080:
-                args += ['-vf', f'scale={height * 2 // 3}:{height}']
+                args += ['-vf', f'scale={output_width}:{height}']
             args += (['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'vbr', '-cq', '18', '-b:v', '0'] if gpu
                      else ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18'])
             args += ['-pix_fmt', 'yuv420p', '-r', str(fps), '-movflags', '+faststart', str(partial)]

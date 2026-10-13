@@ -6,6 +6,9 @@ const upstreamHeight=960,upstreamFps=60;
 state.fill=localStorage.getItem('judgement-fill')==='true';
 $('judgement-fill').checked=state.fill;
 $('judgement-fill').onchange=()=>{state.fill=$('judgement-fill').checked;localStorage.setItem('judgement-fill',String(state.fill));drawAll();};
+state.pairHighlight=localStorage.getItem('pair-highlight')==='true';
+$('pair-highlight').checked=state.pairHighlight;
+$('pair-highlight').onchange=()=>{state.pairHighlight=$('pair-highlight').checked;localStorage.setItem('pair-highlight',String(state.pairHighlight));state.hover=null;$('tooltip').hidden=true;drawAll();};
 function spanForScrollSpeed(speed){return upstreamHeight*1000/(speed*upstreamFps);}
 const gradeColors = {MAX:'#ffffff','300':'#ffd237','200':'#46a815','100':'#448fe2','50':'#448fe2',Miss:'#ff6262'};
 const colors = {early:'#68d5e3',late:'#f4b376',muted:'#8393ac'};
@@ -79,6 +82,8 @@ async function loadReplay(replay){
   try{
     const data=await request(`/api/analyze?id=${encodeURIComponent(replay.id)}`);if(token!==state.loading)return;state.data=data;
     $('song-cover').hidden=!data.cover?.available;
+    $('cover-panel').hidden=!data.cover?.available;
+    if(data.cover?.available){$('cover-download').href=data.cover.url;$('cover-download').download=data.cover.name||'cover';}else{$('cover-download').removeAttribute('href');}
     if(data.cover?.available)$('song-cover').src=data.cover.url;else $('song-cover').removeAttribute('src');
     state.lanes=Array.from({length:data.keys},(_,i)=>data.rows.filter(row=>row.column===i));
     state.curveSlopes=state.lanes.map(curveTangents);
@@ -143,7 +148,7 @@ function drawPreview(canvas=null,view=state){
       ctx.fillRect(left+row.column*cell+5,upper,cell-10,lower-upper);
     }
   }
-  // 音符预期时刻用细白线保留，密集判定窗重叠时仍能辨认每个音符。
+  // 音符预期时刻用细白实线。
   for(const row of view.data.rows){
     if(row.time>view.end||row.time<view.start)continue;
     ctx.fillStyle='#ffffffaa';ctx.fillRect(left+row.column*cell+5,y(row.time)-1,cell-10,2);
@@ -215,19 +220,34 @@ function drawPreview(canvas=null,view=state){
     }
   }
   const selected=view.hover?.link||(view.hover&&(view.data.click_links||[]).find(link=>!link.estimated&&link.column===view.hover.column&&link.reference_time===view.hover.time&&(view.hover.actual===null||link.time===view.hover.actual)));
-  if(selected&&!selected.estimated){
+  const highlighted=view.pairHighlight?(view.data.click_links||[]).filter(link=>!link.estimated&&Math.max(link.time,link.reference_time+maxWindow)>=view.start&&Math.min(link.time,link.reference_time-maxWindow)<=view.end):(selected&&!selected.estimated?[selected]:[]);
+  for(const selected of highlighted){
     const center=left+(selected.column+.5)*cell,upper=y(selected.reference_time+maxWindow),lower=y(selected.reference_time-maxWindow),actualY=y(selected.time);
-    ctx.save();ctx.strokeStyle=selected.early_miss?'#ff7880':'#d5aaff';ctx.lineWidth=3;ctx.shadowColor=selected.early_miss?'#ff424f':'#c391ff';ctx.shadowBlur=9;
-    ctx.strokeRect(left+selected.column*cell+5,upper,cell-10,lower-upper);
     const failed=selected.estimated||(view.data.invalid_clicks||[]).some(c=>c.column===selected.column&&c.time===selected.time);
+    const note=view.lanes[selected.column].find(row=>row.time===selected.reference_time);
+    const highlight=failed?gradeColors.Miss:(gradeColors[note?.head_judgement||note?.judgement]||gradeColors.Miss);
+    const noteHalf=cell/2-5,hitHalf=failed?cell/2-7:Math.min(18,cell*.7)/2+2;
+    const sourceY=actualY<upper?upper:actualY>lower?lower:y(selected.reference_time);
+    const targetY=failed?actualY:actualY+(actualY<sourceY?8.5:-8.5);
+    ctx.save();ctx.fillStyle=highlight;ctx.globalAlpha=.18;
+    ctx.fillRect(center-noteHalf,upper,noteHalf*2,lower-upper);
+    ctx.beginPath();ctx.moveTo(center-noteHalf,sourceY);ctx.lineTo(center+noteHalf,sourceY);
+    ctx.lineTo(center+hitHalf,targetY);ctx.lineTo(center-hitHalf,targetY);ctx.closePath();ctx.fill();
+    ctx.globalAlpha=1;ctx.strokeStyle=highlight;ctx.lineWidth=3;ctx.shadowColor=highlight;ctx.shadowBlur=9;
+    ctx.strokeRect(center-noteHalf,upper,noteHalf*2,lower-upper);
     if(failed){ctx.beginPath();ctx.moveTo(center-cell/2+7,actualY);ctx.lineTo(center+cell/2-7,actualY);ctx.stroke();}
-    else ctx.strokeRect(center-Math.min(18,cell*.7)/2-2,actualY-8.5,Math.min(18,cell*.7)+4,17);
+    else {
+      const markerWidth=Math.min(18,cell*.7);
+      const x0=center-markerWidth/2-2,x1=center+markerWidth/2+2,y0=actualY-8.5,y1=actualY+8.5,cut=4;
+      ctx.beginPath();ctx.moveTo(x0+cut,y0);ctx.lineTo(x1-cut,y0);ctx.lineTo(x1,y0+cut);ctx.lineTo(x1,y1-cut);ctx.lineTo(x1-cut,y1);ctx.lineTo(x0+cut,y1);ctx.lineTo(x0,y1-cut);ctx.lineTo(x0,y0+cut);ctx.closePath();ctx.stroke();
+    }
     ctx.restore();
   }
   ctx.restore();
   ctx.strokeStyle='#d3dcef';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(left,hitY);ctx.lineTo(left+width,hitY);ctx.stroke();ctx.fillStyle='#bdc9df';ctx.textAlign='left';ctx.font='9px Segoe UI';ctx.fillText('NOW',left+3,hitY-9);if(!canvas){$('preview-time').textContent=fmtTime(view.cursor);}else{ctx.fillStyle='#aab5c7';ctx.fillText(preciseTime(view.cursor),left+3,h-9);}
 }
 function showHit(row,event){
+  if(state.pairHighlight){state.hover=null;$('tooltip').hidden=true;return;}
   state.hover=row;drawPreview();const description=row.link?.early_miss?`EARLY MISS ${fmtOffset(row.offset)} · 可能连崩起点`:row.offset===null?'Miss / 无有效头部':`${row.offset<0?'EARLY':row.offset>0?'LATE':'准时'} ${fmtOffset(row.offset)}`;
   const detail=`第 ${row.column+1} 列 · ${row.ln?'长条头':'普通音符'} · ${row.judgement}`,timing=`预期 ${preciseTime(row.time)}${row.actual!==null?` / 实际 ${preciseTime(row.actual)}`:''}`;
   const value=document.createElement('strong');value.className=row.offset<=0?'early-text':'late-text';value.textContent=description;const info=document.createElement('div');info.textContent=detail;const time=document.createElement('small');time.textContent=timing;
@@ -267,11 +287,14 @@ async function playPreview(){
 }
 $('preview-play').onclick=playPreview;
 document.addEventListener('keydown',event=>{
-  if((event.code!=='Space'&&event.key!==' ')||event.ctrlKey||event.altKey||event.metaKey||event.isComposing||!state.data||$('analysis').hidden)return;
+  const space=event.code==='Space'||event.key===' ',arrow=event.key==='ArrowLeft'||event.key==='ArrowRight';
+  if((!space&&!arrow)||event.ctrlKey||event.altKey||event.metaKey||event.isComposing)return;
   const target=event.target;
-  if(target instanceof Element&&(target.closest('input,textarea,select')||target.isContentEditable))return;
+  if(target instanceof Element&&(target.closest('textarea,input:not([type="checkbox"]):not([type="range"])')||target.isContentEditable))return;
   event.preventDefault();
-  if(!event.repeat)playPreview();
+  if(!state.data||$('analysis').hidden)return;
+  if(arrow){seek(state.cursor+(event.key==='ArrowLeft'?-5000:5000),false);state.lastFrame=null;}
+  else if(!event.repeat)playPreview();
 });
 $('music').addEventListener('loadedmetadata',()=>{if(!state.audioActive)syncMusicPosition();});
 $('music').addEventListener('ended',()=>{state.audioActive=false;state.lastFrame=null;});
@@ -310,7 +333,7 @@ $('note-preview').addEventListener('pointermove',event=>{
 });
 for(const event of ['pointerup','pointercancel'])$('note-preview').addEventListener(event,e=>{noteDrag=null;e.currentTarget.style.cursor='grab';});
 $('note-preview').addEventListener('pointerleave',()=>{if(!noteDrag){state.hover=null;$('tooltip').hidden=true;drawPreview();}});
-$('note-preview').addEventListener('wheel',event=>{if(!state.data)return;event.preventDefault();seek(state.cursor+event.deltaY/trackGeometry().scale);},{passive:false});
+$('note-preview').addEventListener('wheel',event=>{if(!state.data)return;event.preventDefault();seek(state.cursor-event.deltaY/trackGeometry().scale);},{passive:false});
 $('note-preview').addEventListener('keydown',event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();seek(state.cursor+(event.key==='ArrowDown'?100:-100));}});
 let overviewDrag=null;
 function overviewTime(event){const rect=$('overview').getBoundingClientRect();return Math.max(0,Math.min(state.data.duration,(event.clientX-rect.left-2)/(rect.width-4)*state.data.duration));}
@@ -324,9 +347,11 @@ $('choose-osu').onclick=async()=>{const button=$('choose-osu');button.disabled=t
 
 let videoExport=null;
 async function videoRequest(path,body){return request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
-function exportRange(full){if(!state.data)return;$('export-start').value=((full?0:state.start)/1000).toFixed(3);$('export-end').value=((full?state.data.duration:state.end)/1000).toFixed(3);}
-$('export-full').onclick=()=>exportRange(true);$('export-visible').onclick=()=>exportRange(false);
-const exportControls=['export-start','export-end','export-full','export-visible','export-fps','export-music','export-encoder','export-resolution'];
+function exportRange(){if(!state.data)return;$('export-start').value='0';$('export-end').value=(state.data.duration/1000).toFixed(3);}
+$('export-full').onclick=exportRange;
+$('export-start-now').onclick=()=>{if(state.data)$('export-start').value=(state.cursor/1000).toFixed(3);};
+$('export-end-now').onclick=()=>{if(state.data)$('export-end').value=(state.cursor/1000).toFixed(3);};
+const exportControls=['export-start','export-end','export-full','export-start-now','export-end-now','export-fps','export-music','export-encoder','export-resolution'];
 function exportBusy(busy){$('export-video').disabled=busy;$('export-cancel').hidden=!busy;exportControls.forEach(id=>$(id).disabled=busy);}
 $('export-cancel').onclick=async()=>{if(videoExport){videoExport.cancelled=true;$('export-status').textContent='正在取消…';if(videoExport.id){try{await videoRequest(`/api/video/cancel?id=${videoExport.id}`,{});}catch{}}}};
 async function watchExport(task){
@@ -356,7 +381,8 @@ $('export-video').onclick=async()=>{
   const task={cancelled:false,id:null};videoExport=task;exportBusy(true);$('export-result').replaceChildren();
   try{
     $('export-status').textContent='正在提交后台任务…';
-    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,focusRange:state.focusRange,resolution:Number($('export-resolution').value)});
+    const previewRect=$('note-preview').getBoundingClientRect();
+    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,pairHighlight:state.pairHighlight,focusRange:state.focusRange,aspect:previewRect.width/previewRect.height,resolution:Number($('export-resolution').value)});
     task.id=job.id;localStorage.setItem('background-video-job',task.id);await watchExport(task);
   }catch(error){$('export-status').textContent=`导出失败：${error.message}`;videoExport=null;exportBusy(false);}
 };

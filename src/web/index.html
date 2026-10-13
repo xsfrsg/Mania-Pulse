@@ -21,6 +21,7 @@
           <div class="panel-heading"><h2>铺面观察</h2><span id="preview-time" class="preview-time">0:00.00</span></div>
           <canvas id="note-preview" tabindex="0" aria-label="轨内偏差折线与谱面，左早右晚，可上下拖动" role="img"></canvas>
           <canvas id="overview" aria-label="整曲音符密度进度条，点击或拖动定位" role="img"></canvas>
+          <div class="observer-shortcuts"><span>空格 播放／暂停</span><span>←／→ 跳转 5 秒</span><span>滚轮／拖动 浏览</span></div>
         </section>
         <section class="observer-controls" aria-label="观察器控件">
           <div class="preview-width-control"><span>宽度</span><div class="segmented" id="width-presets" aria-label="观察器宽度"><button data-width="240">窄</button><button data-width="320" class="active">标准</button><button data-width="420">宽</button></div></div>
@@ -28,14 +29,15 @@
           <div class="scroll-speed"><label for="scroll-speed">流速</label><input id="scroll-speed" type="range" min="5" max="40" step="1" value="20"><output id="scroll-speed-value">20 px/帧</output></div>
           <div class="scroll-speed"><label for="offset-range">偏差量程</label><input id="offset-range" type="range" min="40" max="80" step="1" value="40"><output id="offset-range-value">±40 ms</output></div>
           <label class="music-toggle"><input id="judgement-fill" type="checkbox"> 判定填色</label>
+          <label class="music-toggle"><input id="pair-highlight" type="checkbox"> 高亮音符对</label>
           <audio id="music" preload="metadata"></audio><div id="music-status" class="music-status"></div>
-          <img id="song-cover" alt="谱面封面" hidden>
+          <div id="cover-panel" hidden><img id="song-cover" alt="谱面封面" hidden><a id="cover-download" download>下载原图</a></div>
         </section>
         <section class="video-export">
           <h2>黑底视频导出</h2>
-          <div class="export-options"><label>分辨率 <select id="export-resolution" aria-label="导出分辨率"><option value="540">540p · 360×540</option><option value="720">720p · 480×720</option><option value="1080" selected>1080p · 720×1080</option></select></label></div>
-          <div class="export-range"><label>起点 秒<input id="export-start" type="number" min="0" step="0.001" value="0"></label><label>终点 秒<input id="export-end" type="number" min="0" step="0.001" value="1"></label></div>
-          <div class="export-options"><button id="export-full">整曲范围</button><button id="export-visible">当前可视范围</button><select id="export-fps" aria-label="导出视频帧率"><option value="60">60 fps</option><option value="30">30 fps</option></select><label><input id="export-music" type="checkbox" checked> 带音乐</label></div>
+          <div class="export-options"><label>分辨率 <select id="export-resolution" aria-label="导出分辨率"><option value="540">540p</option><option value="720">720p</option><option value="1080" selected>1080p</option></select></label></div>
+          <div class="export-range"><div class="export-endpoint"><div class="endpoint-heading"><label for="export-start">起点 秒</label><button id="export-start-now" type="button" title="用观察器当前时间作为起点">当前时间</button></div><input id="export-start" type="number" min="0" step="0.001" value="0"></div><div class="export-endpoint"><div class="endpoint-heading"><label for="export-end">终点 秒</label><button id="export-end-now" type="button" title="用观察器当前时间作为终点">当前时间</button></div><input id="export-end" type="number" min="0" step="0.001" value="1"></div></div>
+          <div class="export-options"><button id="export-full">整曲范围</button><select id="export-fps" aria-label="导出视频帧率"><option value="60">60 fps</option><option value="30">30 fps</option></select><label><input id="export-music" type="checkbox" checked> 带音乐</label></div>
           <div class="export-options"><select id="export-encoder" aria-label="视频编码器"><option value="auto">自动 · 优先 GPU</option><option value="gpu">GPU · NVIDIA NVENC</option><option value="cpu">CPU · x264</option></select><button id="export-video">导出 MP4</button><button id="export-cancel" hidden>取消导出</button></div>
           <p class="export-note">仅观察器 · 黑底 · 沿用填色与流速设置</p>
           <div id="export-status" role="status" aria-live="polite"></div><div id="export-result"></div>

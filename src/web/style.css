@@ -59,12 +59,21 @@ header{margin-bottom:14px}
 .video-export{grid-column:4;grid-row:1;align-self:start;justify-self:start;width:100%;max-width:680px;border-top:0;border-left:1px solid var(--border);padding:10px 0 10px 18px;margin:0;font-size:12px}
 .video-export h2{font-size:16px;margin-bottom:16px}
 .export-range{gap:10px}
+.export-endpoint{flex:1;min-width:0}
+.endpoint-heading{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.endpoint-heading label{flex:initial}
+.endpoint-heading button{font-size:10px;padding:3px 6px;white-space:nowrap}
 .export-options{gap:8px;margin-top:12px}
 .export-note{line-height:1.6}
 @media(max-width:1500px){main{padding:24px}.analysis-workspace{grid-template-columns:minmax(80px,110px) minmax(240px,var(--preview-width)) 160px minmax(240px,1fr);gap:12px}.video-export{padding-left:12px}.title-row h1{font-size:19px}}
 @media(max-width:1080px){.analysis-workspace{grid-template-columns:minmax(0,var(--preview-width)) minmax(160px,210px);justify-content:center;gap:12px}.title-row{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 16px;padding:0 0 8px}.title-row h1{grid-column:1}.title-row #song-detail{grid-column:1}.title-row .match-badge{grid-column:2;grid-row:1 / span 2}.preview-panel{grid-column:1;grid-row:2}.observer-controls{grid-column:2;grid-row:2}.video-export{grid-column:1 / -1;grid-row:3;justify-self:center;max-width:720px;border-left:0;border-top:1px solid var(--border);padding:16px 0 0;margin-top:12px}#note-preview{height:min(700px,calc(100vh - 210px));min-height:440px}}
 @media(max-width:760px){.analysis-workspace{grid-template-columns:minmax(0,1fr);gap:8px}.title-row{grid-column:1;grid-row:1}.preview-panel,.observer-controls{width:min(var(--preview-width),100%);justify-self:center}.preview-panel{grid-column:1;grid-row:2}.observer-controls{grid-column:1;grid-row:3;align-self:auto;padding:4px 0}.observer-controls .preview-controls{flex-direction:row;flex-wrap:wrap}.observer-controls .preview-controls button,.observer-controls .preview-controls select{width:auto}.observer-controls .preview-controls .music-toggle{margin-left:0}.video-export{grid-column:1;grid-row:4}#note-preview{height:440px;min-height:0}}
-#song-cover{position:fixed;right:24px;bottom:24px;width:min(240px,18vw);max-height:160px;object-fit:contain;border-radius:5px;pointer-events:none}
+#cover-panel{position:fixed;right:24px;bottom:24px;width:min(240px,18vw);display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#cover-panel[hidden]{display:none}
+#song-cover{width:100%;max-height:160px;object-fit:contain;border-radius:5px;pointer-events:none}
+#cover-download{font-size:12px;color:#aab7ca;text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:5px;background:#131b26}
+#cover-download:hover{color:#fff;border-color:#8393ac}
+.observer-shortcuts{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:3px 10px;padding:6px 8px;color:#8393ac;font-size:10px;line-height:1.5}
 #song-cover[hidden]{display:none}
 #warnings:empty{display:none}
 .title-row #warnings{min-width:0;grid-column:1 / -1}

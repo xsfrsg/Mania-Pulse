@@ -48,9 +48,13 @@ def hit_color(offset):
 class ReplayRenderer:
     width, height, top, bottom = 720, 1080, 39, 1051
 
-    def __init__(self, data, span, fill=False, focus=40):
+    def __init__(self, data, span, fill=False, focus=40, width=720, pair_highlight=False):
         self.data, self.span = data, span
         self.fill = fill
+        self.width = width
+        self.pair_highlight = pair_highlight
+        self.note_lookup = {(r['column'], r['time']): r for r in data['rows']}
+        self.failed_pairs = {(r['column'], r['time']) for r in data.get('invalid_clicks', [])}
         self.focus = focus
         self.cell = (self.width - 24) / data['keys']
         self.hit_y = self.bottom - 8
@@ -79,7 +83,7 @@ class ReplayRenderer:
             for text, dx, color in [(f'-{focus:g}', -extent, (104, 213, 227)), ('0', 0, (159, 174, 197)), (f'+{focus:g}', extent, (244, 179, 118))]:
                 self.text(self.base, text, center + dx, 29, color, centered=True)
             self.text(self.base, str(i + 1), center, 1071, centered=True)
-        cv2.line(self.base, (708, self.top), (708, self.bottom), (52, 65, 90))
+        cv2.line(self.base, (self.width - 12, self.top), (self.width - 12, self.bottom), (52, 65, 90))
 
     @staticmethod
     def text(frame, text, x, y, color=(203, 213, 233), centered=False):
@@ -105,7 +109,7 @@ class ReplayRenderer:
         points = np.round(points).astype(np.int32)
         pad = math.ceil(thickness) + 3
         x0, y0 = max(12, int(points[:, 0].min()) - pad), max(self.top, int(points[:, 1].min()) - pad)
-        x1, y1 = min(708, int(points[:, 0].max()) + pad), min(self.bottom, int(points[:, 1].max()) + pad)
+        x1, y1 = min(self.width - 12, int(points[:, 0].max()) + pad), min(self.bottom, int(points[:, 1].max()) + pad)
         if x1 <= x0 or y1 <= y0:
             return
         roi = frame[y0:y1, x0:x1]
@@ -244,7 +248,49 @@ class ReplayRenderer:
                 self.stroke(frame, [(center + 8, py), (center + half, py)], (255, 66, 79), 5)
                 if self.top + 18 <= py < self.bottom:
                     self.text(frame, 'EARLY MISS', center, py - 12, (255, 120, 128), centered=True)
-        cv2.line(frame, (12, round(self.hit_y)), (708, round(self.hit_y)), (211, 220, 239), 2)
+        if self.pair_highlight:
+            for link in self.data.get('click_links', []):
+                if link.get('estimated') or max(link['time'], link['reference_time'] + self.data['windows'][0]) < start or min(link['time'], link['reference_time'] - self.data['windows'][0]) > end:
+                    continue
+                self.highlight_pair(frame, link, cursor)
+        cv2.line(frame, (12, round(self.hit_y)), (self.width - 12, round(self.hit_y)), (211, 220, 239), 2)
         self.text(frame, 'NOW', 15, self.hit_y - 9)
         self.text(frame, f'{cursor / 1000:.3f}s', 15, 1071, (170, 181, 199))
         return frame
+
+    def highlight_pair(self, frame, link, cursor):
+        column = link['column']
+        note = self.note_lookup.get((column, link['reference_time']), {})
+        failed = (column, link['time']) in self.failed_pairs
+        grade = 'Miss' if failed else note.get('head_judgement') or note.get('judgement')
+        color = {'MAX': (255, 255, 255), '300': (255, 210, 55), '200': (70, 168, 21),
+                 '100': (68, 143, 226), '50': (68, 143, 226)}.get(grade, (255, 98, 98))
+        center = 12 + (column + .5) * self.cell
+        half = self.cell / 2 - 5
+        upper = self.y(link['reference_time'] + self.data['windows'][0], cursor)
+        lower = self.y(link['reference_time'] - self.data['windows'][0], cursor)
+        actual = self.y(link['time'], cursor)
+        source = upper if actual < upper else lower if actual > lower else self.y(link['reference_time'], cursor)
+        marker = min(38, round(self.cell * .7))
+        hit_half = self.cell / 2 - 7 if failed else marker / 2 + 3
+        target = actual if failed else actual + (15 if actual < source else -15)
+        y0 = max(self.top, math.floor(min(upper, lower, source, target)))
+        y1 = min(self.bottom, math.ceil(max(upper, lower, source, target)) + 1)
+        x0, x1 = max(12, math.floor(center-half)), min(self.width-12, math.ceil(center+half)+1)
+        if y1 > y0 and x1 > x0:
+            roi = frame[y0:y1, x0:x1]
+            mask = np.zeros(roi.shape[:2], np.uint8)
+            for polygon in [[(center-half,upper),(center+half,upper),(center+half,lower),(center-half,lower)],
+                            [(center-half,source),(center+half,source),(center+hit_half,target),(center-hit_half,target)]]:
+                points = np.round(np.array(polygon) - (x0,y0)).astype(np.int32)
+                cv2.fillConvexPoly(mask, points, 255)
+            roi[mask>0] = roi[mask>0] * .82 + np.array(color) * .18
+        outline = [(center-half,upper),(center+half,upper),(center+half,lower),(center-half,lower),(center-half,upper)]
+        if failed:
+            hit = [(center-hit_half,actual),(center+hit_half,actual)]
+        else:
+            l,r,t,b,cut = center-hit_half,center+hit_half,actual-15,actual+15,6
+            hit = [(l+cut,t),(r-cut,t),(r,t+cut),(r,b-cut),(r-cut,b),(l+cut,b),(l,b-cut),(l,t+cut),(l+cut,t)]
+        for points in (outline, hit):
+            self.stroke(frame, points, color, 9, .2)
+            self.stroke(frame, points, color, 4)
