@@ -1,7 +1,7 @@
 """osu!mania 逐列时序分析。
 
 判定规则参考 Mania-Replay-Master (Apache-2.0)，源码和许可证见上游 GitHub 仓库及 NOTICE。
-保留原项目的匹配/LN 规则，不将重建结果冒充游戏官方逐音符记录。
+匹配参考原项目，长条采用独立输入状态结算；不冒充游戏官方逐音符记录。
 只使用 Python 标准库，读取 osu! 目录，不修改游戏文件。
 """
 from __future__ import annotations
@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from hold_judgement import HoldJudgement, hit_grade
 
 ROOT = Path(__file__).resolve().parent
 LABELS = ['MAX', '300', '200', '100', '50', 'Miss']
@@ -88,16 +89,18 @@ def replay_header(path):
 
 @dataclass(eq=False)
 class Note:
-    time: int
+    time: float
     column: int
-    duration: int = 0
+    duration: float = 0
     start: int = -1
     end: int = -1
     related: 'Note | None' = None
     index: int = 0
-    offset: int = 0
-    offset_end: int = 0
+    offset: float = 0
+    offset_end: float | None = 0
     head_action: 'Note | None' = None
+    release_known: bool = True
+    hold_state: 'HoldJudgement | None' = None
 
     @property
     def finish(self):
@@ -136,7 +139,7 @@ def parse_map(raw, rate=1, mirror=False):
             column = min(keys - 1, max(0, int(fields[0]) * keys // 512))
             if mirror:
                 column = keys - 1 - column
-            notes.append(Note(int(stamp / rate), column, int(duration / rate)))
+            notes.append(Note(stamp / rate, column, duration / rate))
     notes.sort(key=lambda n: n.time)
     for index, note in enumerate(notes):
         note.index = index
@@ -161,10 +164,13 @@ def parse_actions(compressed, keys, rate=1):
                     held[column] = current
             elif held[column] is not None:
                 begin = held[column]
-                actions.append(Note(int(begin / rate), column, int((current - begin) / rate)))
+                actions.append(Note(begin / rate, column, (current - begin) / rate))
                 held[column] = None
-    # 原项目仅记录已松开的按键；尾部未松开事件记录为诊断，不推断松开时刻。
+    # 未松键也保留真实按下；finish 此时只表示观测终点，不能作为松键使用。
     unclosed = sum(value is not None for value in held)
+    for column, begin in enumerate(held):
+        if begin is not None:
+            actions.append(Note(begin / rate, column, (current - begin) / rate, release_known=False))
     actions.sort(key=lambda n: n.time)
     for index, action in enumerate(actions):
         action.index = index
@@ -184,15 +190,15 @@ def windows(od, mods):
 
 
 def judge(notes, actions, window, score_v2=False):
-    """逐列重建；增加同轨前音预期时刻保护，LN 继续采用上游重判规则。"""
+    """逐列输入归属及前音保护；长条首判、补按、尾判独立维护。"""
     lanes = {}
     for note in notes:
         lanes.setdefault(note.column, []).append(note)
     positions = {col: 0 for col in lanes}
-    cannot, ln_judged = set(), set()
+    cannot = set()
 
     def grade(diff):
-        return next((i for i, bound in enumerate(window[:-1]) if diff <= bound), -1)
+        return hit_grade(diff, window)
 
     def can_hit(action, note, lane, position):
         diff = action.time - note.time
@@ -243,7 +249,8 @@ def judge(notes, actions, window, score_v2=False):
         positions[action.column] = pos
         if target is None:
             continue
-        action.offset, action.offset_end = action.time - target.time, action.finish - target.finish
+        action.offset = action.time - target.time
+        action.offset_end = action.finish - target.finish if action.release_known else None
         result = grade(abs(action.offset))
         action.start = result
         if target.start == -1:
@@ -254,26 +261,18 @@ def judge(notes, actions, window, score_v2=False):
         action.related, target.related = target, action
         if not target.duration:
             continue
-        end_diff = abs(action.offset_end)
-        action.end = grade(end_diff / 1.5) if action.offset_end <= window[3] * 1.5 else -1
-        if target in ln_judged or target.start in (-1, 5):
-            if 0 <= action.end <= 3:
-                action.end = 4
-        target.end = action.end
-        start_diff = abs(action.offset)
-        if target.time - window[4] > action.time:
-            start_diff = abs(target.time - (target.finish - 1))
-        total_diff = start_diff + end_diff
-        again = action.offset_end < -window[4]
-        total_grade = -1 if again else next((i for i, factor in enumerate((1.2, 1.1, 1, 1))
-                                            if start_diff <= window[i] * factor and total_diff <= window[i] * factor * 2), 4)
-        if target in ln_judged and total_grade in (0, 1):
-            total_grade = 2
-        ln_judged.add(target)
-        if not score_v2:
-            target.start = total_grade
-        if not again:
+        if target.hold_state is None:
+            target.hold_state = HoldJudgement(target, window, score_v2)
+        target.hold_state.accept(action)
+        action.end = target.hold_state.tail_grade
+        if target.hold_state.settled_at is not None:
             cannot.add(target)
+    for note in notes:
+        if note.duration:
+            state = note.hold_state or HoldJudgement(note, window, score_v2)
+            note.hold_state = state
+            note.start = state.finish()
+            note.end = state.tail_grade
     return notes
 
 
@@ -381,15 +380,27 @@ class Library:
             rows = []
             for n in notes:
                 a = n.head_action
-                hit = a is not None and 0 <= n.start <= 4
+                hit = a is not None and 0 <= a.start <= 4
                 rows.append(dict(time=n.time, column=n.column, offset=a.offset if hit else None,
                                  actual=a.time if hit else None, judgement=LABELS[n.start] if n.start >= 0 else 'Miss',
-                                 head_judgement=LABELS[a.start] if hit else None, ln=bool(n.duration), duration=n.duration, index=n.index))
+                                 head_judgement=LABELS[a.start] if hit else None, ln=bool(n.duration), duration=n.duration, index=n.index,
+                                 tail_time=n.finish if n.duration else None,
+                                 tail_actual=n.hold_state.release_time if n.hold_state else None,
+                                 tail_offset=(n.hold_state.release_time - n.finish) if n.hold_state and n.hold_state.release_time is not None else None,
+                                 tail_settled_at=n.hold_state.settled_at if n.hold_state else None,
+                                 tail_effective_error=n.hold_state.effective_tail_error if n.hold_state else None,
+                                 hold_phase=n.hold_state.phase if n.hold_state else None,
+                                 hold_broken=n.hold_state.broken if n.hold_state else False,
+                                 hold_pending=n.hold_state.pending if n.hold_state else False,
+                                 hold_events=n.hold_state.transitions if n.hold_state else []))
             warnings = []
             if counts != header['counts']:
                 warnings.append('重建判定总数与回放记录不一致；曲线可用于观察，逐音符有效性尚不能视为官方判定。')
             if unclosed:
-                warnings.append(f'{unclosed} 个尾部按键没有松开记录，未推断为有效命中。')
+                warnings.append(f'{unclosed} 个按键没有松开记录，已保留真实按下；未虚构松键。')
+            pending = sum(n.hold_state.pending for n in notes if n.hold_state)
+            if pending:
+                warnings.append(f'{pending} 根长条的记录在尾部结算前结束，最终判定尚不能确定；统计中的 Miss 包含这些未决音符。')
             unmatched_clicks = [dict(time=a.time, column=a.column) for a in actions if a.related is None]
             invalid_clicks = [dict(time=a.time, column=a.column, reference_time=a.related.time, early_miss=a.offset < 0) for a in actions if a.related is not None and a.start < 0]
             click_links = [dict(time=a.time, column=a.column, reference_time=a.related.time, estimated=False, early_miss=a.start < 0 and a.offset < 0) for a in actions if a.related is not None]

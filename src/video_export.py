@@ -73,7 +73,7 @@ class VideoExports:
         skin = options.get('skin', 'cut')
         if skin not in ('cut', 'ball'):
             raise ValueError('音符皮肤无效')
-        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus, width=render_width, pair_highlight=bool(options.get('pairHighlight', False)), skin=skin)
+        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus, width=render_width, pair_highlight=bool(options.get('pairHighlight', False)), skin=skin, show_tails=bool(options.get('showTails', True)))
         with self.lock:
             if any(job['state'] in ('rendering', 'encoding') for job in self.jobs.values()):
                 raise ValueError('已有视频正在导出，请完成或取消后再试')

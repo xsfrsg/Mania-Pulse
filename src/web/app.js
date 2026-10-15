@@ -7,6 +7,9 @@ state.fill=localStorage.getItem('judgement-fill')==='true';
 $('judgement-fill').checked=state.fill;
 $('judgement-fill').onchange=()=>{state.fill=$('judgement-fill').checked;localStorage.setItem('judgement-fill',String(state.fill));drawAll();};
 state.pairHighlight=localStorage.getItem('pair-highlight')==='true';
+state.showTails=localStorage.getItem('show-tails')!=='false';
+$('show-tails').checked=state.showTails;
+$('show-tails').onchange=()=>{state.showTails=$('show-tails').checked;localStorage.setItem('show-tails',String(state.showTails));state.hover=null;$('tooltip').hidden=true;drawAll();};
 state.skin=localStorage.getItem('note-skin')==='ball'?'ball':'cut';
 $('note-skin').value=state.skin;
 $('note-skin').onchange=()=>{state.skin=$('note-skin').value;localStorage.setItem('note-skin',state.skin);state.hover=null;$('tooltip').hidden=true;drawAll();};
@@ -212,7 +215,7 @@ function drawPreview(canvas=null,view=state){
       ctx.beginPath();ctx.moveTo(x0+cut,y0);ctx.lineTo(x1-cut,y0);ctx.lineTo(x1,y0+cut);ctx.lineTo(x1,y1-cut);ctx.lineTo(x1-cut,y1);ctx.lineTo(x0+cut,y1);ctx.lineTo(x0,y1-cut);ctx.lineTo(x0,y0+cut);ctx.closePath();
       ctx.fillStyle=hitColor(row.offset);ctx.fill();ctx.strokeStyle='#070b10aa';ctx.lineWidth=.7;ctx.stroke();
       ctx.strokeStyle='#10151d';ctx.lineWidth=1.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(center-markerWidth*.27,actualY);ctx.lineTo(center+markerWidth*.27,actualY);ctx.stroke();
-      if(view.hover?.index===row.index){ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.stroke();}
+      if(!view.hover?.tail&&view.hover?.index===row.index){ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.stroke();}
     }
   }
   // 未匹配的按下独立标记，不参与偏差曲线。
@@ -230,7 +233,18 @@ function drawPreview(canvas=null,view=state){
       ctx.fillStyle='#23070b';ctx.fillRect(center-labelWidth/2-3,py-16,labelWidth+6,11);ctx.fillStyle='#ff7880';ctx.fillText(label,center,py-7);ctx.restore();
     }
   }
-  const selected=view.hover?.link||(view.hover&&(view.data.click_links||[]).find(link=>!link.estimated&&link.column===view.hover.column&&link.reference_time===view.hover.time&&(view.hover.actual===null||link.time===view.hover.actual)));
+  if(view.showTails){
+    for(const row of view.data.rows){
+      if(!row.ln||row.tail_time==null)continue;
+      const center=left+(row.column+.5)*cell,expectedY=y(row.tail_time),actualY=row.tail_actual==null?null:y(row.tail_actual);
+      const active=view.pairHighlight||(view.hover?.tail&&view.hover.index===row.index),radius=Math.min(10,cell*.3),color=active?(gradeColors[row.judgement]||gradeColors.Miss):'#b8c5da';
+      ctx.save();ctx.lineWidth=active?2.5:1.5;ctx.strokeStyle=color;ctx.shadowColor=color;ctx.shadowBlur=active?10:3;
+      if(expectedY>=top-radius&&expectedY<=g.bottom+radius){ctx.beginPath();ctx.moveTo(center,expectedY-radius);ctx.lineTo(center+radius,expectedY);ctx.lineTo(center,expectedY+radius);ctx.lineTo(center-radius,expectedY);ctx.closePath();if(active){ctx.save();ctx.globalAlpha=.18;ctx.fillStyle=color;ctx.fill();ctx.restore();}ctx.stroke();}
+      ctx.shadowBlur=active?8:0;
+      if(actualY!==null&&actualY>=top-6&&actualY<=g.bottom+6){ctx.strokeStyle=hitColor(row.tail_offset);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(center-6,actualY-3);ctx.lineTo(center,actualY+3);ctx.lineTo(center+6,actualY-3);ctx.stroke();}ctx.restore();
+    }
+  }
+  const selected=view.hover?.tail?null:(view.hover?.link||(view.hover&&(view.data.click_links||[]).find(link=>!link.estimated&&link.column===view.hover.column&&link.reference_time===view.hover.time&&(view.hover.actual===null||link.time===view.hover.actual))));
   const highlighted=view.pairHighlight?(view.data.click_links||[]).filter(link=>!link.estimated&&Math.max(link.time,link.reference_time+maxWindow)>=view.start&&Math.min(link.time,link.reference_time-maxWindow)<=view.end):(selected&&!selected.estimated?[selected]:[]);
   for(const selected of highlighted){
     const center=left+(selected.column+.5)*cell,upper=y(selected.reference_time+maxWindow),lower=y(selected.reference_time-maxWindow),actualY=y(selected.time);
@@ -267,8 +281,8 @@ function drawPreview(canvas=null,view=state){
 }
 function showHit(row,event){
   if(state.pairHighlight){state.hover=null;$('tooltip').hidden=true;return;}
-  state.hover=row;drawPreview();const description=row.link?.early_miss?`EARLY MISS ${fmtOffset(row.offset)} · 可能连崩起点`:row.offset===null?'Miss / 无有效头部':`${row.offset<0?'EARLY':row.offset>0?'LATE':'准时'} ${fmtOffset(row.offset)}`;
-  const detail=`第 ${row.column+1} 列 · ${row.ln?'长条头':'普通音符'} · ${row.judgement}`,timing=`预期 ${preciseTime(row.time)}${row.actual!==null?` / 实际 ${preciseTime(row.actual)}`:''}`;
+  state.hover=row;drawPreview();const description=row.link?.early_miss?`EARLY MISS ${fmtOffset(row.offset)} · 可能连崩起点`:row.offset===null?(row.tail?'无关联松键记录':'Miss / 无有效头部'):`${row.tail?'松键 ':''}${row.offset<0?'EARLY':row.offset>0?'LATE':'准时'} ${fmtOffset(row.offset)}`;
+  const detail=`第 ${row.column+1} 列 · ${row.tail?'长条尾（真实松键）':row.ln?'长条头':'普通音符'} · ${row.tail?'整条判定 ':''}${row.judgement}${row.hold_pending?' · 尾判未决':''}`,timing=`预期 ${preciseTime(row.time)}${row.actual!==null?` / 实际 ${preciseTime(row.actual)}`:''}${row.tail&&row.tail_settled_at!=null&&row.tail_settled_at!==row.actual?` / 结算 ${preciseTime(row.tail_settled_at)}`:''}`;
   const value=document.createElement('strong');value.className=row.offset<=0?'early-text':'late-text';value.textContent=description;const info=document.createElement('div');info.textContent=detail;const time=document.createElement('small');time.textContent=timing;
   if(row.link?.early_miss)value.style.color='#ff7880';
   const tip=$('tooltip');tip.replaceChildren(value.cloneNode(true),info.cloneNode(true),time.cloneNode(true));tip.hidden=false;tip.style.left=`${Math.max(8,Math.min(window.innerWidth-tip.offsetWidth-12,event.clientX+15))}px`;tip.style.top=`${Math.max(8,Math.min(window.innerHeight-tip.offsetHeight-12,event.clientY+15))}px`;
@@ -348,6 +362,12 @@ $('note-preview').addEventListener('pointermove',event=>{
     const distance=Math.min(actualDistance,expectedDistance);
     if(distance<=best){const target=lane.find(n=>n.time===link.reference_time);row={...target,column,time:link.reference_time,actual:link.time,offset:link.time-link.reference_time,judgement:link.early_miss?'early-Miss':link.estimated?'未匹配（估算归属）':target?.judgement,link};best=distance;}
   }
+  if(state.showTails){for(const candidate of lane){
+    if(!candidate.ln||candidate.tail_time==null)continue;
+    const expectedY=g.hitY-(candidate.tail_time-state.cursor)*g.scale,actualY=candidate.tail_actual==null?Infinity:g.hitY-(candidate.tail_actual-state.cursor)*g.scale;
+    const distance=Math.min(Math.hypot(px-center,py-expectedY),Math.hypot(px-center,py-actualY));
+    if(distance<Math.min(best,13)){row={...candidate,tail:true,time:candidate.tail_time,actual:candidate.tail_actual,offset:candidate.tail_offset};best=distance;}
+  }}
   if(row)showHit(row,event);else{state.hover=null;$('tooltip').hidden=true;drawPreview();}
 });
 for(const event of ['pointerup','pointercancel'])$('note-preview').addEventListener(event,e=>{noteDrag=null;e.currentTarget.style.cursor='grab';});
@@ -401,7 +421,7 @@ $('export-video').onclick=async()=>{
   try{
     $('export-status').textContent='正在提交后台任务…';
     const previewRect=$('note-preview').getBoundingClientRect();
-    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,pairHighlight:state.pairHighlight,skin:state.skin,focusRange:state.focusRange,aspect:previewRect.width/previewRect.height,resolution:Number($('export-resolution').value)});
+    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,pairHighlight:state.pairHighlight,showTails:state.showTails,skin:state.skin,focusRange:state.focusRange,aspect:previewRect.width/previewRect.height,resolution:Number($('export-resolution').value)});
     task.id=job.id;localStorage.setItem('background-video-job',task.id);await watchExport(task);
   }catch(error){$('export-status').textContent=`导出失败：${error.message}`;videoExport=null;exportBusy(false);}
 };

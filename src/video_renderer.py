@@ -48,11 +48,12 @@ def hit_color(offset):
 class ReplayRenderer:
     width, height, top, bottom = 720, 1080, 39, 1051
 
-    def __init__(self, data, span, fill=False, focus=40, width=720, pair_highlight=False, skin='cut'):
+    def __init__(self, data, span, fill=False, focus=40, width=720, pair_highlight=False, skin='cut', show_tails=True):
         self.data, self.span = data, span
         self.fill = fill
         self.width = width
         self.skin = skin
+        self.show_tails = show_tails
         self.pair_highlight = pair_highlight
         self.note_lookup = {(r['column'], r['time']): r for r in data['rows']}
         self.failed_pairs = {(r['column'], r['time']) for r in data.get('invalid_clicks', [])}
@@ -264,6 +265,25 @@ class ReplayRenderer:
                 self.stroke(frame, [(center + 8, py), (center + half, py)], (255, 66, 79), 5)
                 if self.top + 18 <= py < self.bottom:
                     self.text(frame, 'EARLY MISS', center, py - 12, (255, 120, 128), centered=True)
+        if self.show_tails:
+            for row in self.longs:
+                if row.get('tail_time') is None:
+                    continue
+                center = 12 + (row['column'] + .5) * self.cell
+                yy = self.y(row['tail_time'], cursor)
+                radius = min(20, self.cell * .3)
+                color = {'MAX': (255,255,255), '300': (255,210,55), '200': (70,168,21),
+                         '100': (68,143,226), '50': (68,143,226)}.get(row['judgement'], (255,98,98)) if self.pair_highlight else (184,197,218)
+                if self.top - radius <= yy <= self.bottom + radius:
+                    points = [(center,yy-radius),(center+radius,yy),(center,yy+radius),(center-radius,yy),(center,yy-radius)]
+                    if self.pair_highlight:
+                        self.fill_shapes(frame, [points], color, .18)
+                    self.stroke(frame, points, color, 11 if self.pair_highlight else 7, .18 if self.pair_highlight else .08)
+                    self.stroke(frame, points, color, 5 if self.pair_highlight else 3)
+                if row.get('tail_actual') is not None:
+                    yy = self.y(row['tail_actual'], cursor)
+                    if self.top - 10 <= yy <= self.bottom + 10:
+                        self.stroke(frame, [(center-11,yy-5),(center,yy+5),(center+11,yy-5)], hit_color(row['tail_offset']), 4)
         if self.pair_highlight:
             for link in self.data.get('click_links', []):
                 if link.get('estimated') or max(link['time'], link['reference_time'] + self.data['windows'][0]) < start or min(link['time'], link['reference_time'] - self.data['windows'][0]) > end:
