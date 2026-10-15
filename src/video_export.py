@@ -70,7 +70,10 @@ class VideoExports:
         focus = float(options.get('focusRange', 40))
         if not math.isfinite(focus) or not 40 <= focus <= 80:
             raise ValueError('偏差量程需在 ±40 至 ±80 ms 之间')
-        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus, width=render_width, pair_highlight=bool(options.get('pairHighlight', False)))
+        skin = options.get('skin', 'cut')
+        if skin not in ('cut', 'ball'):
+            raise ValueError('音符皮肤无效')
+        renderer = ReplayRenderer(data, span, fill=bool(options.get('fill', False)), focus=focus, width=render_width, pair_highlight=bool(options.get('pairHighlight', False)), skin=skin)
         with self.lock:
             if any(job['state'] in ('rendering', 'encoding') for job in self.jobs.values()):
                 raise ValueError('已有视频正在导出，请完成或取消后再试')
@@ -86,7 +89,7 @@ class VideoExports:
             rate = data['rate'] * speed
             if audio:
                 args += ['-ss', str(start * data['rate']), '-i', str(audio), '-map', '0:v:0', '-map', '1:a:0',
-                         '-af', 'apad' if rate == 1 else f"aresample=48000,asetrate=48000*{rate},aresample=48000,apad", '-c:a', 'aac', '-b:a', '192k']
+                         '-af', 'volume=-6dB,apad' if rate == 1 else f"aresample=48000,asetrate=48000*{rate},aresample=48000,volume=-6dB,apad", '-c:a', 'aac', '-b:a', '192k']
             else:
                 args += ['-an']
             args += ['-t', str(frames / fps)]

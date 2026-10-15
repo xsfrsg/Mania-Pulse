@@ -48,10 +48,11 @@ def hit_color(offset):
 class ReplayRenderer:
     width, height, top, bottom = 720, 1080, 39, 1051
 
-    def __init__(self, data, span, fill=False, focus=40, width=720, pair_highlight=False):
+    def __init__(self, data, span, fill=False, focus=40, width=720, pair_highlight=False, skin='cut'):
         self.data, self.span = data, span
         self.fill = fill
         self.width = width
+        self.skin = skin
         self.pair_highlight = pair_highlight
         self.note_lookup = {(r['column'], r['time']): r for r in data['rows']}
         self.failed_pairs = {(r['column'], r['time']) for r in data.get('invalid_clicks', [])}
@@ -127,6 +128,15 @@ class ReplayRenderer:
         grade = row.get('head_judgement') or row['judgement']
         color = {'MAX': (255, 255, 255), '300': (255, 210, 55), '200': (70, 168, 21),
                  '100': (68, 143, 226), '50': (68, 143, 226)}.get(grade, (255, 98, 98))
+        if self.skin == 'ball':
+            center = 12 + (row['column'] + .5) * self.cell
+            yy = self.y(row['time'], cursor)
+            radius = self.cell * .375
+            points = self.circle_points(center, yy, radius)
+            if self.fill:
+                self.fill_shapes(frame, [points], color, .25)
+            self.stroke(frame, points, color, 3)
+            return
         for yy in (upper, lower):
             if self.top <= yy < self.bottom:
                 cv2.line(frame, (left, yy), (right, yy), color, 3, cv2.LINE_AA)
@@ -144,15 +154,17 @@ class ReplayRenderer:
             if row['time'] <= end and row['time'] + row['duration'] >= start:
                 self.rect(frame, row['column'], self.y(row['time'] + row['duration'], cursor), self.y(row['time'], cursor), (145, 169, 202), .145)
         for bound, color in [(self.data['windows'][0], (184, 188, 197))]:
-            if not self.fill:
+            if not self.fill or self.skin == 'ball':
                 continue
             for lane, times in zip(self.lanes, self.times):
                 for row in lane[bisect.bisect_left(times, start - bound):bisect.bisect_right(times, end + bound)]:
                     self.rect(frame, row['column'], self.y(row['time'] + bound, cursor), self.y(row['time'] - bound, cursor), color)
         for lane, times in zip(self.lanes, self.times):
             for row in lane[bisect.bisect_left(times, start):bisect.bisect_right(times, end)]:
+                if self.skin == 'ball':
+                    continue
                 self.rect(frame, row['column'], self.y(row['time'], cursor) - 1, self.y(row['time'], cursor) + 1, (255, 255, 255), .667)
-        bound = self.data['windows'][0]
+        bound = self.cell * .375 / self.scale if self.skin == 'ball' else self.data['windows'][0]
         for lane, times in zip(self.lanes, self.times):
             for row in lane[bisect.bisect_left(times, start - bound):bisect.bisect_right(times, end + bound)]:
                 self.judgement_outline(frame, row, cursor)
@@ -230,6 +242,10 @@ class ReplayRenderer:
                                     [x1, y1 - cut], [x1 - cut, y1], [x0 + cut, y1],
                                     [x0, y1 - cut], [x0, y0 + cut]], dtype=np.int32)
                 if self.top <= actual_y < self.bottom:
+                    if self.skin == 'ball':
+                        radius = max(1, round(min(13, self.cell * .2)))
+                        cv2.circle(frame, (round(center), round(actual_y)), radius, hit_color(row['offset']), -1, cv2.LINE_AA)
+                        continue
                     cv2.fillConvexPoly(frame, polygon, hit_color(row['offset']), cv2.LINE_AA)
                     cv2.polylines(frame, [polygon], True, (8, 12, 18), 2, cv2.LINE_AA)
                     cv2.line(frame, (round(center - marker_width * .27), round(actual_y)),
@@ -262,10 +278,23 @@ class ReplayRenderer:
         column = link['column']
         note = self.note_lookup.get((column, link['reference_time']), {})
         failed = (column, link['time']) in self.failed_pairs
+        show_band = abs(link['time'] - link['reference_time']) > self.data['windows'][0]
         grade = 'Miss' if failed else note.get('head_judgement') or note.get('judgement')
         color = {'MAX': (255, 255, 255), '300': (255, 210, 55), '200': (70, 168, 21),
                  '100': (68, 143, 226), '50': (68, 143, 226)}.get(grade, (255, 98, 98))
         center = 12 + (column + .5) * self.cell
+        if self.skin == 'ball':
+            expected = self.y(link['reference_time'], cursor)
+            actual = self.y(link['time'], cursor)
+            radius, hit_radius = self.cell * .375, min(13, self.cell * .2) + 3
+            note = self.circle_points(center, expected, radius)
+            hit = self.circle_points(center, actual, hit_radius)
+            band = [(center-radius,expected),(center+radius,expected),(center+hit_radius,actual),(center-hit_radius,actual)]
+            self.fill_shapes(frame, [note, band] if show_band else [note], color, .18)
+            for points in (note, hit):
+                self.stroke(frame, points, color, 9, .2)
+                self.stroke(frame, points, color, 4)
+            return
         half = self.cell / 2 - 5
         upper = self.y(link['reference_time'] + self.data['windows'][0], cursor)
         lower = self.y(link['reference_time'] - self.data['windows'][0], cursor)
@@ -280,8 +309,10 @@ class ReplayRenderer:
         if y1 > y0 and x1 > x0:
             roi = frame[y0:y1, x0:x1]
             mask = np.zeros(roi.shape[:2], np.uint8)
-            for polygon in [[(center-half,upper),(center+half,upper),(center+half,lower),(center-half,lower)],
-                            [(center-half,source),(center+half,source),(center+hit_half,target),(center-hit_half,target)]]:
+            shapes = [[(center-half,upper),(center+half,upper),(center+half,lower),(center-half,lower)]]
+            if show_band:
+                shapes.append([(center-half,source),(center+half,source),(center+hit_half,target),(center-hit_half,target)])
+            for polygon in shapes:
                 points = np.round(np.array(polygon) - (x0,y0)).astype(np.int32)
                 cv2.fillConvexPoly(mask, points, 255)
             roi[mask>0] = roi[mask>0] * .82 + np.array(color) * .18
@@ -294,3 +325,21 @@ class ReplayRenderer:
         for points in (outline, hit):
             self.stroke(frame, points, color, 9, .2)
             self.stroke(frame, points, color, 4)
+
+    @staticmethod
+    def circle_points(x, y, radius):
+        return [(x + radius * math.cos(t), y + radius * math.sin(t)) for t in np.linspace(0, 2 * math.pi, 49)]
+
+    def fill_shapes(self, frame, shapes, color, alpha):
+        all_points = np.concatenate([np.asarray(shape) for shape in shapes])
+        x0 = max(12, math.floor(all_points[:, 0].min()))
+        x1 = min(self.width - 12, math.ceil(all_points[:, 0].max()) + 1)
+        y0 = max(self.top, math.floor(all_points[:, 1].min()))
+        y1 = min(self.bottom, math.ceil(all_points[:, 1].max()) + 1)
+        if x1 <= x0 or y1 <= y0:
+            return
+        roi = frame[y0:y1, x0:x1]
+        mask = np.zeros(roi.shape[:2], np.uint8)
+        for shape in shapes:
+            cv2.fillConvexPoly(mask, np.round(np.asarray(shape) - (x0, y0)).astype(np.int32), 255)
+        roi[mask > 0] = roi[mask > 0] * (1 - alpha) + np.array(color) * alpha

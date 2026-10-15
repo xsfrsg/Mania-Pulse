@@ -7,6 +7,9 @@ state.fill=localStorage.getItem('judgement-fill')==='true';
 $('judgement-fill').checked=state.fill;
 $('judgement-fill').onchange=()=>{state.fill=$('judgement-fill').checked;localStorage.setItem('judgement-fill',String(state.fill));drawAll();};
 state.pairHighlight=localStorage.getItem('pair-highlight')==='true';
+state.skin=localStorage.getItem('note-skin')==='ball'?'ball':'cut';
+$('note-skin').value=state.skin;
+$('note-skin').onchange=()=>{state.skin=$('note-skin').value;localStorage.setItem('note-skin',state.skin);state.hover=null;$('tooltip').hidden=true;drawAll();};
 $('pair-highlight').checked=state.pairHighlight;
 $('pair-highlight').onchange=()=>{state.pairHighlight=$('pair-highlight').checked;localStorage.setItem('pair-highlight',String(state.pairHighlight));state.hover=null;$('tooltip').hidden=true;drawAll();};
 function spanForScrollSpeed(speed){return upstreamHeight*1000/(speed*upstreamFps);}
@@ -140,7 +143,7 @@ function drawPreview(canvas=null,view=state){
     }
   }
   for(const [bound,color] of [[maxWindow,'#b8bcc5']]){
-    if(!view.fill)continue;
+    if(!view.fill||view.skin==='ball')continue;
     ctx.fillStyle=color;
     for(const row of view.data.rows){
       if(row.time-bound>view.end||row.time+bound<view.start)continue;
@@ -150,13 +153,20 @@ function drawPreview(canvas=null,view=state){
   }
   // 音符预期时刻用细白实线。
   for(const row of view.data.rows){
+    if(view.skin==='ball')continue;
     if(row.time>view.end||row.time<view.start)continue;
     ctx.fillStyle='#ffffffaa';ctx.fillRect(left+row.column*cell+5,y(row.time)-1,cell-10,2);
   }
   for(const row of view.data.rows){
-    if(row.time-maxWindow>view.end||row.time+maxWindow<view.start)continue;
+    const visualWindow=view.skin==='ball'?cell*.375/scale:maxWindow;
+    if(row.time-visualWindow>view.end||row.time+visualWindow<view.start)continue;
     const x=left+row.column*cell+5,upper=y(row.time+maxWindow),lower=y(row.time-maxWindow);
     const grade=row.head_judgement||row.judgement;
+    if(view.skin==='ball'){
+      const center=left+(row.column+.5)*cell,radius=cell*.375;
+      ctx.save();ctx.strokeStyle=gradeColors[grade]||gradeColors.Miss;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(center,y(row.time),radius,0,Math.PI*2);
+      if(view.fill){ctx.fillStyle=ctx.strokeStyle;ctx.globalAlpha=.25;ctx.fill();ctx.globalAlpha=1;}ctx.stroke();ctx.restore();continue;
+    }
     ctx.strokeStyle=gradeColors[grade]||gradeColors.Miss;
     ctx.lineWidth=1.5;ctx.strokeRect(x,upper,cell-10,lower-upper);
     ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,upper);ctx.lineTo(x,lower);ctx.moveTo(x+cell-10,upper);ctx.lineTo(x+cell-10,lower);ctx.stroke();
@@ -198,6 +208,7 @@ function drawPreview(canvas=null,view=state){
       // 实际按下位置用带细槽的小块标记；中心白色，偏差向两侧渐变。
       const actualY=y(row.actual);
       const markerWidth=Math.min(18,cell*.7),markerHeight=13,cut=3,x0=center-markerWidth/2,x1=center+markerWidth/2,y0=actualY-markerHeight/2,y1=actualY+markerHeight/2;
+      if(view.skin==='ball'){ctx.save();ctx.beginPath();ctx.arc(center,actualY,Math.min(6.5,cell*.2),0,Math.PI*2);ctx.fillStyle=hitColor(row.offset);ctx.fill();ctx.strokeStyle='#070b10aa';ctx.lineWidth=.7;ctx.stroke();ctx.restore();continue;}
       ctx.beginPath();ctx.moveTo(x0+cut,y0);ctx.lineTo(x1-cut,y0);ctx.lineTo(x1,y0+cut);ctx.lineTo(x1,y1-cut);ctx.lineTo(x1-cut,y1);ctx.lineTo(x0+cut,y1);ctx.lineTo(x0,y1-cut);ctx.lineTo(x0,y0+cut);ctx.closePath();
       ctx.fillStyle=hitColor(row.offset);ctx.fill();ctx.strokeStyle='#070b10aa';ctx.lineWidth=.7;ctx.stroke();
       ctx.strokeStyle='#10151d';ctx.lineWidth=1.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(center-markerWidth*.27,actualY);ctx.lineTo(center+markerWidth*.27,actualY);ctx.stroke();
@@ -226,13 +237,21 @@ function drawPreview(canvas=null,view=state){
     const failed=selected.estimated||(view.data.invalid_clicks||[]).some(c=>c.column===selected.column&&c.time===selected.time);
     const note=view.lanes[selected.column].find(row=>row.time===selected.reference_time);
     const highlight=failed?gradeColors.Miss:(gradeColors[note?.head_judgement||note?.judgement]||gradeColors.Miss);
+    const showBand=Math.abs(selected.time-selected.reference_time)>maxWindow;
+    if(view.skin==='ball'){
+      const expectedY=y(selected.reference_time),radius=cell*.375,hitRadius=Math.min(6.5,cell*.2)+2;
+      ctx.save();ctx.fillStyle=highlight;ctx.globalAlpha=.18;
+      if(showBand){ctx.beginPath();ctx.moveTo(center-radius,expectedY);ctx.lineTo(center+radius,expectedY);ctx.lineTo(center+hitRadius,actualY);ctx.lineTo(center-hitRadius,actualY);ctx.closePath();ctx.fill();}
+      ctx.beginPath();ctx.arc(center,expectedY,radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=highlight;ctx.lineWidth=3;ctx.shadowColor=highlight;ctx.shadowBlur=9;ctx.stroke();
+      ctx.beginPath();ctx.arc(center,actualY,hitRadius,0,Math.PI*2);ctx.stroke();ctx.restore();continue;
+    }
     const noteHalf=cell/2-5,hitHalf=failed?cell/2-7:Math.min(18,cell*.7)/2+2;
     const sourceY=actualY<upper?upper:actualY>lower?lower:y(selected.reference_time);
     const targetY=failed?actualY:actualY+(actualY<sourceY?8.5:-8.5);
     ctx.save();ctx.fillStyle=highlight;ctx.globalAlpha=.18;
     ctx.fillRect(center-noteHalf,upper,noteHalf*2,lower-upper);
-    ctx.beginPath();ctx.moveTo(center-noteHalf,sourceY);ctx.lineTo(center+noteHalf,sourceY);
-    ctx.lineTo(center+hitHalf,targetY);ctx.lineTo(center-hitHalf,targetY);ctx.closePath();ctx.fill();
+    if(showBand){ctx.beginPath();ctx.moveTo(center-noteHalf,sourceY);ctx.lineTo(center+noteHalf,sourceY);
+    ctx.lineTo(center+hitHalf,targetY);ctx.lineTo(center-hitHalf,targetY);ctx.closePath();ctx.fill();}
     ctx.globalAlpha=1;ctx.strokeStyle=highlight;ctx.lineWidth=3;ctx.shadowColor=highlight;ctx.shadowBlur=9;
     ctx.strokeRect(center-noteHalf,upper,noteHalf*2,lower-upper);
     if(failed){ctx.beginPath();ctx.moveTo(center-cell/2+7,actualY);ctx.lineTo(center+cell/2-7,actualY);ctx.stroke();}
@@ -258,7 +277,7 @@ function configureMusic(data){
   const music=$('music');music.pause();music.removeAttribute('src');state.audioActive=false;
   $('music-enabled').disabled=!data.audio?.available;
   $('music-status').textContent=data.audio?.available?`配乐：${data.audio.name}`:'未找到谱面音乐文件，仍可播放竖轨';
-  if(data.audio?.available){music.src=data.audio.url;music.volume=.7;music.preservesPitch=false;}music.load();
+  if(data.audio?.available){music.src=data.audio.url;music.volume=10**(-6/20);music.preservesPitch=false;}music.load();
 }
 function syncMusicPosition(){
   if(!state.data?.audio?.available)return;
@@ -325,7 +344,7 @@ $('note-preview').addEventListener('pointermove',event=>{
     const actualY=g.hitY-(link.time-state.cursor)*g.scale,expectedY=g.hitY-(link.reference_time-state.cursor)*g.scale;
     const failed=link.estimated||(state.data.invalid_clicks||[]).some(c=>c.column===column&&c.time===link.time);
     const actualDistance=Math.hypot(Math.max(0,Math.abs(px-center)-(failed?g.cell/2-7:Math.min(9,g.cell*.35))),Math.max(0,Math.abs(py-actualY)-(failed?3:6.5)));
-    const expectedDistance=Math.hypot(Math.max(0,Math.abs(px-center)-(g.cell/2-5)),py-expectedY);
+    const expectedDistance=state.skin==='ball'?Math.max(0,Math.hypot(px-center,py-expectedY)-g.cell*.375):Math.hypot(Math.max(0,Math.abs(px-center)-(g.cell/2-5)),py-expectedY);
     const distance=Math.min(actualDistance,expectedDistance);
     if(distance<=best){const target=lane.find(n=>n.time===link.reference_time);row={...target,column,time:link.reference_time,actual:link.time,offset:link.time-link.reference_time,judgement:link.early_miss?'early-Miss':link.estimated?'未匹配（估算归属）':target?.judgement,link};best=distance;}
   }
@@ -382,7 +401,7 @@ $('export-video').onclick=async()=>{
   try{
     $('export-status').textContent='正在提交后台任务…';
     const previewRect=$('note-preview').getBoundingClientRect();
-    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,pairHighlight:state.pairHighlight,focusRange:state.focusRange,aspect:previewRect.width/previewRect.height,resolution:Number($('export-resolution').value)});
+    const job=await videoRequest('/api/video/start',{id:state.selected,start,end,fps,music:$('export-music').checked,encoder:$('export-encoder').value,span:state.span,speed:Number($('preview-speed').value),fill:state.fill,pairHighlight:state.pairHighlight,skin:state.skin,focusRange:state.focusRange,aspect:previewRect.width/previewRect.height,resolution:Number($('export-resolution').value)});
     task.id=job.id;localStorage.setItem('background-video-job',task.id);await watchExport(task);
   }catch(error){$('export-status').textContent=`导出失败：${error.message}`;videoExport=null;exportBusy(false);}
 };
