@@ -184,7 +184,7 @@ def windows(od, mods):
 
 
 def judge(notes, actions, window, score_v2=False):
-    """逐列队列等价于上游同列过滤；保留 LN 重判和 omScoreV2Adjust 默认行为。"""
+    """逐列重建；增加同轨前音预期时刻保护，LN 继续采用上游重判规则。"""
     lanes = {}
     for note in notes:
         lanes.setdefault(note.column, []).append(note)
@@ -197,6 +197,10 @@ def judge(notes, actions, window, score_v2=False):
     def can_hit(action, note, lane, position):
         diff = action.time - note.time
         if -diff > window[5]:
+            return 'early'
+        # 提前处理前音后，先等到其预期时刻，避免后续点击连续抢判后音。
+        # 等于前音预期时刻时允许继续；不以固定冷却时长或连崩次数猜测。
+        if position > 0 and action.time < lane[position - 1].time:
             return 'early'
         if not note.duration:
             return 'late' if diff >= window[3] else 'hit'
